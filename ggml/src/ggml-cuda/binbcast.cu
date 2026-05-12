@@ -300,7 +300,7 @@ static void launch_bin_bcast_pack(const ggml_tensor * src0, const ggml_tensor * 
         } else {
             const uint3 ne3_fastdiv = init_fastdiv_values((uint32_t) ne3);
             {
-                auto launch_params = ggml_cuda_kernel_launch_params(block_nums, block_dims, 0, stream);
+                auto launch_params = ggml_cuda_kernel_launch_params(block_nums, block_dims, 0, stream, true);
                 ggml_cuda_kernel_launch(k_bin_bcast<bin_op, src0_t, src1_t, dst_t, type_for_index<const src1_t *, I>...>, launch_params,
                     src0_dd, src1_dd, dst_dd, ne0, ne1, ne2, ne3_fastdiv, ne10, ne11, ne12, ne13,
                   /*s0,*/ s1, s2,  s3,

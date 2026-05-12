@@ -190,6 +190,11 @@ struct ggml_cuda_kernel_launch_params {
     dim3 block_dims;
     size_t shmem;
     cudaStream_t stream;
+    // Opt-in: when true, ggml_cuda_kernel_launch routes this launch through
+    // cudaLaunchKernelEx with the PDL stream-serialization attribute. Default
+    // is false so adding the field is a no-op for existing call sites; the
+    // GGML_CUDA_PDL env var still overrides this to off (kill switch).
+    bool use_pdl = false;
 
     // size_t shmem
     ggml_cuda_kernel_launch_params(const dim3& block_nums_, const dim3& block_dims_, size_t shmem_, cudaStream_t stream_)
@@ -198,6 +203,14 @@ struct ggml_cuda_kernel_launch_params {
     // int shmem
     ggml_cuda_kernel_launch_params(const dim3& block_nums_, const dim3& block_dims_, const int shmem_, cudaStream_t stream_)
         : block_nums(block_nums_), block_dims(block_dims_), shmem((size_t)shmem_), stream(stream_) {}
+
+    // size_t shmem, bool use_pdl
+    ggml_cuda_kernel_launch_params(const dim3& block_nums_, const dim3& block_dims_, size_t shmem_, cudaStream_t stream_, bool use_pdl_)
+        : block_nums(block_nums_), block_dims(block_dims_), shmem(shmem_), stream(stream_), use_pdl(use_pdl_) {}
+
+    // int shmem, bool use_pdl
+    ggml_cuda_kernel_launch_params(const dim3& block_nums_, const dim3& block_dims_, const int shmem_, cudaStream_t stream_, bool use_pdl_)
+        : block_nums(block_nums_), block_dims(block_dims_), shmem((size_t)shmem_), stream(stream_), use_pdl(use_pdl_) {}
 };
 
 #if defined(GGML_CUDA_USE_PDL)
@@ -231,7 +244,7 @@ template<typename Kernel, typename... Args>
 static __inline__ void ggml_cuda_kernel_launch(Kernel kernel, const ggml_cuda_kernel_launch_params & launch_params, Args&&... args) {
 #if defined(GGML_CUDA_USE_PDL)
     static const bool disable_pdl = (getenv("GGML_CUDA_PDL") != nullptr);
-    if (!disable_pdl) {
+    if (!disable_pdl && launch_params.use_pdl) {
         auto pdl_cfg = ggml_cuda_pdl_config(launch_params);
         CUDA_CHECK(cudaLaunchKernelEx(&pdl_cfg.cfg, kernel, std::forward<Args>(args)... ));
         return;
