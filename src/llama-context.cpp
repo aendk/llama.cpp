@@ -18,6 +18,13 @@
 #include <limits>
 #include <stdexcept>
 
+#ifdef _WIN32
+#    ifndef NOMINMAX
+#        define NOMINMAX
+#    endif
+#endif
+#include <nvtx3/nvtx3.hpp>
+
 //
 // llama_context
 //
@@ -1267,6 +1274,7 @@ bool llama_context::set_adapter_cvec(
 }
 
 llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, llm_graph_type gtype, llama_memory_context_i * mctx, ggml_status & ret) {
+    nvtx3::scoped_range nvtx_range{nvtx3::event_attributes{nvtx3::rgb{255, 255, 255}, "llama_context::process_ubatch"}};
     if (mctx && !mctx->apply()) {
         LLAMA_LOG_ERROR("%s: failed to apply memory context\n", __func__);
         ret = GGML_STATUS_FAILED;
@@ -1642,6 +1650,8 @@ static bool needs_raw_logits(const llama_ubatch & ubatch, const std::map<llama_s
 }
 
 int llama_context::decode(const llama_batch & batch_inp) {
+    nvtx3::scoped_range sc_decode{nvtx3::event_attributes{nvtx3::rgb{152, 251, 152}, "llama_context::decode"}};
+
     // MTP hook batches carry both token (next-token id) and embd (h_nextn row),
     // so accept either present rather than requiring exactly one.
     GGML_ASSERT(batch_inp.token || batch_inp.embd);
@@ -1667,7 +1677,9 @@ int llama_context::decode(const llama_batch & batch_inp) {
     const bool has_samplers = !sampling.samplers.empty();
 
     const uint32_t n_seq_max = cparams.kv_unified ? LLAMA_MAX_SEQ : cparams.n_seq_max;
-
+    {
+        nvtx3::scoped_range sc_samplers{nvtx3::event_attributes{nvtx3::rgb{173, 216, 230}, "llama_context::samplers"}};
+   
     // TODO: avoid this workaround in the future
     if (has_samplers && batch_inp.logits) {
         std::vector<int32_t> seq_output_count(n_seq_max, 0);
@@ -1692,6 +1704,7 @@ int llama_context::decode(const llama_batch & batch_inp) {
         }
     }
 
+    }
     if (!balloc->init(batch_inp, vocab, memory.get(), n_embd, n_seq_max, output_all)) {
         LLAMA_LOG_ERROR("%s: failed to initialize batch\n", __func__);
         return -1;
@@ -1730,7 +1743,8 @@ int llama_context::decode(const llama_batch & batch_inp) {
     memory_update(false);
 
     llama_memory_context_ptr mctx;
-
+    {
+        nvtx3::scoped_range sc_memory_update{nvtx3::event_attributes{nvtx3::rgb{0, 0, 139}, "llama_context::memory_whileloop"}};
     while (true) {
         mctx = memory->init_batch(*balloc, cparams.n_ubatch, output_all);
         if (!mctx) {
@@ -1772,6 +1786,7 @@ int llama_context::decode(const llama_batch & batch_inp) {
         }
 
         break;
+    }
     }
 
     // reserve output buffer

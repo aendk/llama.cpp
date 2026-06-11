@@ -213,6 +213,9 @@ set_target_properties(ggml-base PROPERTIES
     SOVERSION ${GGML_VERSION_MAJOR}
 )
 
+find_package(CUDAToolkit)
+target_link_libraries(ggml-base PUBLIC CUDA::nvtx3)
+
 target_include_directories(ggml-base PRIVATE .)
 if (GGML_BACKEND_DL)
     target_compile_definitions(ggml-base PUBLIC GGML_BACKEND_DL)

@@ -27,6 +27,7 @@
 #include "ggml.h"
 #include "llama.h"
 
+
 #ifdef _WIN32
 #    define WIN32_LEAN_AND_MEAN
 #    ifndef NOMINMAX
@@ -34,6 +35,7 @@
 #    endif
 #    include <windows.h>
 #endif
+#include <nvtx3/nvtx3.hpp>
 
 // utils
 static uint64_t get_time_ns() {
@@ -2128,7 +2130,11 @@ static bool test_gen(llama_context * ctx, int n_gen, int n_threads) {
             fprintf(stderr, "%s: failed to decode generation batch, res = %d\n", __func__, res);
             return false;
         }
+
+        {
+        nvtx3::scoped_range test_gen_sync{nvtx3::event_attributes{nvtx3::rgb{255, 105, 180}, "llama-bench sync"}};
         llama_synchronize(ctx);
+        }
         token = std::rand() % n_vocab;
     }
     return true;

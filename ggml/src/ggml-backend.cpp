@@ -20,7 +20,14 @@
 #include <stdlib.h>
 #include <string.h>
 #include <algorithm>
+#include <string>
 #include <vector>
+#ifdef _WIN32
+#    ifndef NOMINMAX
+#        define NOMINMAX
+#    endif
+#endif
+#include <nvtx3/nvtx3.hpp>
 
 #ifdef __APPLE__
 #include <sys/types.h>
@@ -1540,6 +1547,7 @@ static bool ggml_backend_sched_alloc_splits(ggml_backend_sched_t sched) {
 
 static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t sched) {
     GGML_ASSERT(sched);
+    nvtx3::scoped_range sc_1("compute_splits");
     struct ggml_backend_sched_split * splits = sched->splits;
 
     ggml_tensor * prev_ids_tensor = nullptr;
@@ -1547,6 +1555,8 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
     std::vector<ggml_bitset_t> used_ids;
 
     for (int split_id = 0; split_id < sched->n_splits; split_id++) {
+        const std::string split_label = "sched_comp_splits=" + std::to_string(split_id);
+        nvtx3::scoped_range sc_2{nvtx3::event_attributes{nvtx3::rgb{255, 255, 0}, split_label.c_str()}};
         struct ggml_backend_sched_split * split = &splits[split_id];
         int split_backend_id = split->backend_id;
         ggml_backend_t split_backend = sched->backends[split_backend_id];
@@ -1555,11 +1565,14 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
 
         // copy the input tensors to the split backend
         for (int input_id = 0; input_id < split->n_inputs; input_id++) {
+            const std::string input_label = "input_id=" + std::to_string(input_id);
+            nvtx3::scoped_range sc_3{nvtx3::event_attributes{nvtx3::rgb{25, 255, 0}, input_label.c_str()}};
             ggml_backend_t input_backend = ggml_backend_sched_get_tensor_backend(sched, split->inputs[input_id]);
             struct ggml_tensor * input = split->inputs[input_id];
             struct ggml_tensor * input_cpy = tensor_copy(input, split_backend_id, sched->cur_copy);
 
             if (input->flags & GGML_TENSOR_FLAG_INPUT) {
+                nvtx3::scoped_range sc_4{nvtx3::event_attributes{nvtx3::rgb{25, 25, 0}, "input_tensor"}};
                 // inputs from the user must be copied immediately to prevent the user overwriting the data before the copy is done
                 if (sched->events[split_backend_id][sched->cur_copy] != NULL) {
                     ggml_backend_event_synchronize(sched->events[split_backend_id][sched->cur_copy]);
@@ -1568,6 +1581,7 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                 }
                 ggml_backend_tensor_copy_async(input_backend, split_backend, input, input_cpy);
             } else {
+                nvtx3::scoped_range sc_5{nvtx3::event_attributes{nvtx3::rgb{255, 5, 0}, "activations"}};
                 // wait for the split backend to finish using the input before overwriting it
                 if (sched->events[split_backend_id][sched->cur_copy] != NULL) {
                     ggml_backend_event_wait(split_backend, sched->events[split_backend_id][sched->cur_copy]);
@@ -1583,6 +1597,7 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                     (node->src[0] == input_cpy && node->op == GGML_OP_MUL_MAT_ID)
                     //|| (node->src[1] == input_cpy && node->op == GGML_OP_ADD_ID) /* GGML_OP_ADD_ID weights are small and not worth splitting */
                     )) {
+                    nvtx3::scoped_range sc_6("MoE-optimization");
 
                     const int64_t n_expert   = node->op == GGML_OP_MUL_MAT_ID ? input->ne[2] : input->ne[1];
                     const size_t expert_size = node->op == GGML_OP_MUL_MAT_ID ? input->nb[2] : input->nb[1];
@@ -1661,9 +1676,11 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                     }
                     copy_experts(first_id, last_id);
                 } else {
+                    nvtx3::scoped_range sc_7("non-moe copy");
                     // try async copy, but if not possible, we can still use a sync copy without synchronizing the dst backend, since we handle the synchronization here with multiple copies and events
                     // TODO: add public function to facilitate this, since applications do not have direct access to the backend interface
                     if (!split_backend->iface.cpy_tensor_async || !split_backend->iface.cpy_tensor_async(input_backend, split_backend, input, input_cpy)) {
+                        nvtx3::scoped_range sc_8("no async copy possible, of both backends + synchronous copy");
                         ggml_backend_synchronize(input_backend);
                         if (sched->events[split_backend_id][sched->cur_copy] != NULL) {
                             ggml_backend_event_synchronize(sched->events[split_backend_id][sched->cur_copy]);
@@ -1678,12 +1695,15 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
 
         ggml_backend_synchronize(split_backend);
 
+        nvtx3::scoped_range sc_9("execution dispatch");
         if (!sched->callback_eval) {
+            nvtx3::scoped_range sc_10("streamlined execution");
             enum ggml_status ec = ggml_backend_graph_compute_async(split_backend, &split->graph);
             if (ec != GGML_STATUS_SUCCESS) {
                 return ec;
             }
         } else {
+            nvtx3::scoped_range sc_11("complex, for-looped execution");
             // similar to ggml_backend_compare_graph_backend
             for (int j0 = 0; j0 < split->graph.n_nodes; j0++) {
                 struct ggml_tensor * t = split->graph.nodes[j0];
@@ -1885,6 +1905,7 @@ bool ggml_backend_sched_alloc_graph(ggml_backend_sched_t sched, struct ggml_cgra
 }
 
 enum ggml_status ggml_backend_sched_graph_compute(ggml_backend_sched_t sched, struct ggml_cgraph * graph) {
+    nvtx3::scoped_range sc_12{nvtx3::event_attributes{nvtx3::rgb{0, 128, 128}, "ggml_backend_sched_graph_compute"}};
     enum ggml_status err = ggml_backend_sched_graph_compute_async(sched, graph);
     ggml_backend_sched_synchronize(sched);
     return err;
