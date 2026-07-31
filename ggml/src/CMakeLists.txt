@@ -201,6 +201,8 @@ add_library(ggml-base
             ggml-alloc.c
             ggml-backend.cpp
             ggml-backend-meta.cpp
+            ggml-backend-sanitize.cpp
+            ggml-backend-sanitize.h
             ggml-opt.cpp
             ggml-threading.cpp
             ggml-threading.h
@@ -473,6 +475,7 @@ endif()
 ggml_add_backend(BLAS)
 ggml_add_backend(CANN)
 ggml_add_backend(CUDA)
+ggml_add_backend(ET)
 ggml_add_backend(HIP)
 ggml_add_backend(METAL)
 ggml_add_backend(MUSA)
