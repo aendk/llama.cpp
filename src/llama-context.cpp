@@ -20,6 +20,13 @@
 #include <stdexcept>
 #include <string>
 
+#ifdef _WIN32
+#    ifndef NOMINMAX
+#        define NOMINMAX
+#    endif
+#endif
+#include <nvtx3/nvtx3.hpp>
+
 //
 // llama_context
 //
@@ -583,6 +590,8 @@ void llama_context::sched_reserve() {
         return;
     }
 
+    nvtx3::scoped_range sc_2{nvtx3::event_attributes{nvtx3::rgb{255, 0, 0}, "sched_reserve"}}; // red
+
     sched_need_reserve = false;
 
     LLAMA_LOG_INFO("%s: reserving ...\n", __func__);
@@ -715,6 +724,8 @@ void llama_context::synchronize() {
         return;
     }
 
+    nvtx3::scoped_range sc_14{nvtx3::event_attributes{nvtx3::rgb{255, 255, 255}, "ctx_synchronize"}}; // white
+
     ggml_backend_sched_synchronize(sched.get());
 
     // FIXME: if multiple single tokens are evaluated without a synchronization,
@@ -792,6 +803,8 @@ bool llama_context::memory_update(bool optimize) {
     if (!memory) {
         return false;
     }
+
+    nvtx3::scoped_range sc_3{nvtx3::event_attributes{nvtx3::rgb{255, 165, 0}, "memory_update"}}; // orange
 
     {
         const auto mctx = memory->init_update(this, optimize);
@@ -1331,6 +1344,8 @@ bool llama_context::set_adapter_cvec(
 }
 
 llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, llm_graph_type gtype, llama_memory_context_i * mctx, ggml_status & ret) {
+    nvtx3::scoped_range sc_7{nvtx3::event_attributes{nvtx3::rgb{75, 0, 130}, "process_ubatch"}}; // indigo
+
     if (mctx && !mctx->apply()) {
         LLAMA_LOG_ERROR("%s: failed to apply memory context\n", __func__);
         ret = GGML_STATUS_FAILED;
@@ -1345,6 +1360,7 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
     const auto gparams = graph_params(res, ubatch, mctx, gtype);
 
     if (!graph_reuse_disable && res->can_reuse(gparams)) {
+        nvtx3::scoped_range sc_8{nvtx3::event_attributes{nvtx3::rgb{50, 205, 50}, "graph_reuse"}}; // lime
         //LLAMA_LOG_DEBUG("%s: reusing previous graph\n", __func__);
 
         // with pipeline parallelism, the previous graph_compute_async may still be running
@@ -1356,6 +1372,8 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
 
         n_reused++;
     } else {
+        nvtx3::scoped_range sc_9{nvtx3::event_attributes{nvtx3::rgb{139, 69, 19}, "graph_build"}}; // brown
+
         res->reset();
 
         ggml_backend_sched_reset(sched.get());
@@ -1382,6 +1400,7 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
 
     // set the input data for the input tensors
     {
+        nvtx3::scoped_range sc_10{nvtx3::event_attributes{nvtx3::rgb{0, 255, 255}, "set_inputs"}}; // cyan
         //const auto t_start_us = ggml_time_us();
 
         // FIXME this call causes a crash if any model inputs were not used in the graph and were therefore not allocated
@@ -1403,6 +1422,8 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
 }
 
 int llama_context::encode(const llama_batch & batch_inp) {
+    nvtx3::scoped_range sc_15{nvtx3::event_attributes{nvtx3::rgb{0, 191, 255}, "ctx_encode"}}; // deepskyblue
+
     // MTP hook batches carry both token (next-token id) and embd (h_nextn row),
     // so accept either present rather than requiring exactly one.
     GGML_ASSERT(batch_inp.token || batch_inp.embd);
@@ -1641,6 +1662,8 @@ static bool needs_raw_logits(const llama_ubatch & ubatch, const std::map<llama_s
 }
 
 int llama_context::decode(const llama_batch & batch_inp) {
+    nvtx3::scoped_range sc_1{nvtx3::event_attributes{nvtx3::rgb{0, 100, 0}, "ctx_decode"}}; // dark green
+
     // MTP hook batches carry both token (next-token id) and embd (h_nextn row),
     // so accept either present rather than requiring exactly one.
     GGML_ASSERT(batch_inp.token || batch_inp.embd);
@@ -1672,6 +1695,8 @@ int llama_context::decode(const llama_batch & batch_inp) {
 
     // embedding contexts output every token even when batch.logits is not set
     if (has_samplers && (output_all || batch_inp.logits)) {
+        nvtx3::scoped_range sc_13{nvtx3::event_attributes{nvtx3::rgb{210, 105, 30}, "check_n_outputs"}}; // chocolate
+
         std::vector<int32_t> seq_output_count(n_seq_max, 0);
 
         for (int32_t i = 0; i < batch_inp.n_tokens; ++i) {
@@ -1701,9 +1726,13 @@ int llama_context::decode(const llama_batch & batch_inp) {
         }
     }
 
-    if (!balloc->init(batch_inp, vocab, memory.get(), n_embd, n_seq_max, output_all)) {
-        LLAMA_LOG_ERROR("%s: failed to initialize batch\n", __func__);
-        return -1;
+    {
+        nvtx3::scoped_range sc_12{nvtx3::event_attributes{nvtx3::rgb{255, 20, 147}, "balloc_init"}}; // deeppink
+
+        if (!balloc->init(batch_inp, vocab, memory.get(), n_embd, n_seq_max, output_all)) {
+            LLAMA_LOG_ERROR("%s: failed to initialize batch\n", __func__);
+            return -1;
+        }
     }
 
     const uint32_t n_tokens_all  = balloc->get_n_tokens();
@@ -1746,6 +1775,8 @@ int llama_context::decode(const llama_batch & batch_inp) {
     llama_memory_context_ptr mctx;
 
     while (true) {
+        nvtx3::scoped_range sc_4{nvtx3::event_attributes{nvtx3::rgb{255, 215, 0}, "mem_init_batch"}}; // gold
+
         mctx = memory->init_batch(*balloc, cparams.n_ubatch, output_all);
         if (!mctx) {
             return -2;
@@ -1803,6 +1834,8 @@ int llama_context::decode(const llama_batch & batch_inp) {
     int64_t n_tokens_prev  = 0;
 
     do {
+        nvtx3::scoped_range sc_6{nvtx3::event_attributes{nvtx3::rgb{0, 128, 128}, "ubatch"}}; // teal
+
         const auto & ubatch = mctx->get_ubatch();
 
         // count the outputs in this ubatch
@@ -1871,6 +1904,8 @@ int llama_context::decode(const llama_batch & batch_inp) {
 
         // extract logits
         if (logits.data && t_logits && n_outputs > 0 && needs_raw_logits(ubatch, sampling.samplers)) {
+            nvtx3::scoped_range sc_16{nvtx3::event_attributes{nvtx3::rgb{255, 255, 0}, "extract_logits"}}; // yellow
+
             ggml_backend_t backend_res = ggml_backend_sched_get_tensor_backend(sched.get(), t_logits);
             GGML_ASSERT(backend_res != nullptr);
             GGML_ASSERT(logits.data != nullptr);
@@ -1886,6 +1921,8 @@ int llama_context::decode(const llama_batch & batch_inp) {
 
         // extract embeddings
         if (embd.data && t_embd && n_outputs > 0) {
+            nvtx3::scoped_range sc_17{nvtx3::event_attributes{nvtx3::rgb{34, 139, 34}, "extract_embd"}}; // forestgreen
+
             ggml_backend_t backend_embd = ggml_backend_sched_get_tensor_backend(sched.get(), t_embd);
             GGML_ASSERT(backend_embd != nullptr);
 
@@ -1949,6 +1986,8 @@ int llama_context::decode(const llama_batch & batch_inp) {
         // extract nextn embeddings before
         // only meaningful in LLAMA_POOLING_TYPE_NONE (per-token); other pooling modes are ignored.
         {
+            nvtx3::scoped_range sc_18{nvtx3::event_attributes{nvtx3::rgb{218, 112, 214}, "extract_h_nextn"}}; // orchid
+
             const bool masked    = cparams.embeddings_nextn_masked;
             const int64_t n_rows = masked ? n_outputs       : (int64_t) ubatch.n_tokens;
             const int64_t offset = masked ? n_outputs_prev  : n_tokens_prev;
@@ -1966,6 +2005,8 @@ int llama_context::decode(const llama_batch & batch_inp) {
         }
 
         if (has_samplers) {
+            nvtx3::scoped_range sc_19{nvtx3::event_attributes{nvtx3::rgb{95, 158, 160}, "copy_sampling"}}; // cadetblue
+
             const auto stride = n_vocab;
 
             // async copy the sampling data from the backend to the host
@@ -2040,6 +2081,8 @@ int llama_context::decode(const llama_batch & batch_inp) {
 //
 
 uint32_t llama_context::output_reserve(int32_t n_outputs) {
+    nvtx3::scoped_range sc_5{nvtx3::event_attributes{nvtx3::rgb{192, 192, 192}, "output_reserve"}}; // silver
+
     const auto & hparams = model.hparams;
     const auto & vocab   = model.vocab;
 
@@ -2202,6 +2245,8 @@ uint32_t llama_context::output_reserve(int32_t n_outputs) {
 }
 
 void llama_context::extract_layer_inputs(const llm_graph_result * res, size_t token_offset, size_t n_tokens) {
+    nvtx3::scoped_range sc_20{nvtx3::event_attributes{nvtx3::rgb{128, 0, 0}, "extract_layer_inputs"}}; // maroon
+
     for (uint32_t il = 0; il < cparams.embeddings_layer_inp.size(); ++il) {
         if (!cparams.embeddings_layer_inp[il]) {
             continue;
@@ -2490,6 +2535,8 @@ llm_graph_params llama_context::graph_params(
 ggml_status llama_context::graph_compute(
             ggml_cgraph * gf,
                    bool   batched) {
+    nvtx3::scoped_range sc_11{nvtx3::event_attributes{nvtx3::rgb{238, 130, 238}, "graph_compute"}}; // violet
+
     int n_threads        = batched ? cparams.n_threads_batch : cparams.n_threads;
     ggml_threadpool_t tp = batched ? threadpool_batch        : threadpool;
 

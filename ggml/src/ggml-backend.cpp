@@ -21,7 +21,10 @@
 #include <string.h>
 #include <algorithm>
 #include <unordered_map>
+#include <string>
 #include <vector>
+
+#include <nvtx3/nvtx3.hpp>
 
 #ifdef __APPLE__
 #include <sys/types.h>
@@ -263,6 +266,7 @@ size_t ggml_backend_get_max_size(ggml_backend_t backend) {
 }
 
 void ggml_backend_tensor_set_async(ggml_backend_t backend, struct ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
+    nvtx3::scoped_range sc_14{nvtx3::event_attributes{nvtx3::rgb{0, 255, 255}, "tensor_set_async"}}; // cyan
     GGML_ASSERT(backend);
     GGML_ASSERT(tensor);
     GGML_ASSERT(tensor->data != NULL && "tensor not allocated");
@@ -277,6 +281,7 @@ void ggml_backend_tensor_set_async(ggml_backend_t backend, struct ggml_tensor * 
 }
 
 void ggml_backend_tensor_get_async(ggml_backend_t backend, const struct ggml_tensor * tensor, void * data, size_t offset, size_t size) {
+    nvtx3::scoped_range sc_15{nvtx3::event_attributes{nvtx3::rgb{240, 230, 140}, "tensor_get_async"}}; // khaki
     GGML_ASSERT(backend);
     GGML_ASSERT(tensor);
     GGML_ASSERT(tensor->data != NULL && "tensor not allocated");
@@ -292,6 +297,7 @@ void ggml_backend_tensor_get_async(ggml_backend_t backend, const struct ggml_ten
 
 void ggml_backend_tensor_set_2d_async(ggml_backend_t backend, struct ggml_tensor * tensor, const void * data, size_t offset, size_t size,
             size_t n_copies, size_t stride_tensor, size_t stride_data) {
+    nvtx3::scoped_range sc_16{nvtx3::event_attributes{nvtx3::rgb{238, 130, 238}, "tensor_set_2d_async"}}; // violet
     GGML_ASSERT(backend);
     GGML_ASSERT(tensor);
     GGML_ASSERT(tensor->data != NULL && "tensor not allocated");
@@ -313,6 +319,7 @@ void ggml_backend_tensor_set_2d_async(ggml_backend_t backend, struct ggml_tensor
 
 void ggml_backend_tensor_get_2d_async(ggml_backend_t backend, const struct ggml_tensor * tensor, void * data, size_t offset, size_t size,
             size_t n_copies, size_t stride_tensor, size_t stride_data) {
+    nvtx3::scoped_range sc_17{nvtx3::event_attributes{nvtx3::rgb{64, 224, 208}, "tensor_get_2d_async"}}; // turquoise
     GGML_ASSERT(backend);
     GGML_ASSERT(tensor);
     GGML_ASSERT(tensor->data != NULL && "tensor not allocated");
@@ -333,6 +340,7 @@ void ggml_backend_tensor_get_2d_async(ggml_backend_t backend, const struct ggml_
 }
 
 void ggml_backend_tensor_set(struct ggml_tensor * tensor, const void * data, size_t offset, size_t size) {
+    nvtx3::scoped_range sc_18{nvtx3::event_attributes{nvtx3::rgb{0, 0, 255}, "tensor_set"}}; // blue
     GGML_ASSERT(tensor);
     ggml_backend_buffer_t buf = tensor->view_src ? tensor->view_src->buffer : tensor->buffer;
     GGML_ASSERT(buf != NULL && "tensor buffer not set");
@@ -348,6 +356,7 @@ void ggml_backend_tensor_set(struct ggml_tensor * tensor, const void * data, siz
 }
 
 void ggml_backend_tensor_get(const struct ggml_tensor * tensor, void * data, size_t offset, size_t size) {
+    nvtx3::scoped_range sc_19{nvtx3::event_attributes{nvtx3::rgb{139, 69, 19}, "tensor_get"}}; // brown
     GGML_ASSERT(tensor);
     ggml_backend_buffer_t buf = tensor->view_src ? tensor->view_src->buffer : tensor->buffer;
     GGML_ASSERT(buf != NULL && "tensor buffer not set");
@@ -364,6 +373,7 @@ void ggml_backend_tensor_get(const struct ggml_tensor * tensor, void * data, siz
 
 void ggml_backend_tensor_set_2d(struct ggml_tensor * tensor, const void * data, size_t offset, size_t size,
             size_t n_copies, size_t stride_tensor, size_t stride_data) {
+    nvtx3::scoped_range sc_20{nvtx3::event_attributes{nvtx3::rgb{128, 0, 0}, "tensor_set_2d"}}; // maroon
     GGML_ASSERT(tensor);
     ggml_backend_buffer_t buf = tensor->view_src ? tensor->view_src->buffer : tensor->buffer;
     GGML_ASSERT(buf != NULL && "tensor buffer not set");
@@ -386,6 +396,7 @@ void ggml_backend_tensor_set_2d(struct ggml_tensor * tensor, const void * data, 
 
 void ggml_backend_tensor_get_2d(const struct ggml_tensor * tensor, void * data, size_t offset, size_t size,
             size_t n_copies, size_t stride_tensor, size_t stride_data) {
+    nvtx3::scoped_range sc_21{nvtx3::event_attributes{nvtx3::rgb{192, 192, 192}, "tensor_get_2d"}}; // silver
     GGML_ASSERT(tensor);
     ggml_backend_buffer_t buf = tensor->view_src ? tensor->view_src->buffer : tensor->buffer;
     GGML_ASSERT(buf != NULL && "tensor buffer not set");
@@ -486,6 +497,7 @@ ggml_backend_dev_t ggml_backend_get_device(ggml_backend_t backend) {
 // backend copy
 
 void ggml_backend_tensor_copy(const struct ggml_tensor * src, struct ggml_tensor * dst) {
+    nvtx3::scoped_range sc_22{nvtx3::event_attributes{nvtx3::rgb{0, 128, 128}, "tensor_copy"}}; // teal
     GGML_ASSERT(ggml_are_same_layout(src, dst) && "cannot copy tensors with different layouts");
 
     if (src == dst) {
@@ -509,6 +521,7 @@ void ggml_backend_tensor_copy(const struct ggml_tensor * src, struct ggml_tensor
 }
 
 void ggml_backend_tensor_copy_async(ggml_backend_t backend_src, ggml_backend_t backend_dst, const struct ggml_tensor * src, struct ggml_tensor * dst) {
+    nvtx3::scoped_range sc_23{nvtx3::event_attributes{nvtx3::rgb{250, 128, 114}, "tensor_copy_async"}}; // salmon
     GGML_ASSERT(ggml_are_same_layout(src, dst) && "cannot copy tensors with different layouts");
 
     if (src == dst) {
@@ -524,6 +537,7 @@ void ggml_backend_tensor_copy_async(ggml_backend_t backend_src, ggml_backend_t b
 
     // an async copy would normally happen after all the queued operations on both backends are completed
     // to simulate the same behavior, we need to synchronize both backends first, and do a blocking copy
+    nvtx3::scoped_range sc_24{nvtx3::event_attributes{nvtx3::rgb{255, 192, 203}, "blocking copy fallback"}}; // pink
     ggml_backend_synchronize(backend_src);
     ggml_backend_synchronize(backend_dst);
     ggml_backend_tensor_copy(src, dst);
@@ -1064,6 +1078,8 @@ static void ggml_backend_sched_set_if_supported(ggml_backend_sched_t sched, stru
 
 // assigns backends to ops and splits the graph into subgraphs that can be computed on the same backend
 void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgraph * graph) {
+    nvtx3::scoped_range sc_27{nvtx3::event_attributes{nvtx3::rgb{70, 130, 180}, "split_graph"}}; // steelblue
+
     // reset splits
     sched->n_splits = 0;
     sched->n_graph_inputs = 0;
@@ -1600,6 +1616,8 @@ void ggml_backend_sched_split_graph(ggml_backend_sched_t sched, struct ggml_cgra
 }
 
 static bool ggml_backend_sched_alloc_splits(ggml_backend_sched_t sched) {
+    nvtx3::scoped_range sc_28{nvtx3::event_attributes{nvtx3::rgb{143, 188, 143}, "alloc_splits"}}; // darkseagreen
+
     bool backend_ids_changed = false;
     for (int i = 0; i < sched->graph.n_nodes; i++) {
         if (sched->node_backend_ids[i] != sched->prev_node_backend_ids[i] &&
@@ -1652,6 +1670,7 @@ static bool ggml_backend_sched_alloc_splits(ggml_backend_sched_t sched) {
 }
 
 static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t sched) {
+    nvtx3::scoped_range sc_1{nvtx3::event_attributes{nvtx3::rgb{128, 128, 128}, "compute_splits"}}; // gray
     GGML_ASSERT(sched);
     struct ggml_backend_sched_split * splits = sched->splits;
 
@@ -1662,6 +1681,7 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
     int prev_backend_id = -1;
 
     for (int split_id = 0; split_id < sched->n_splits; split_id++) {
+        nvtx3::scoped_range sc_2{nvtx3::event_attributes{nvtx3::rgb{255, 255, 0}, ("sched_comp_splits=" + std::to_string(split_id)).c_str()}}; // yellow
         struct ggml_backend_sched_split * split = &splits[split_id];
         int split_backend_id = split->backend_id;
         ggml_backend_t split_backend = sched->backends[split_backend_id];
@@ -1678,11 +1698,13 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
 
         // copy the input tensors to the split backend
         for (int input_id = 0; input_id < split->n_inputs; input_id++) {
+            nvtx3::scoped_range sc_3{nvtx3::event_attributes{nvtx3::rgb{0, 255, 0}, ("input_id=" + std::to_string(input_id)).c_str()}}; // green
             ggml_backend_t input_backend = ggml_backend_sched_get_tensor_backend(sched, split->inputs[input_id]);
             struct ggml_tensor * input = split->inputs[input_id];
             struct ggml_tensor * input_cpy = tensor_copy(input, split_backend_id, sched->cur_copy);
 
             if (input->flags & GGML_TENSOR_FLAG_INPUT) {
+                nvtx3::scoped_range sc_4{nvtx3::event_attributes{nvtx3::rgb{128, 128, 0}, "input_tensor"}}; // olive
                 // inputs from the user must be copied immediately to prevent the user overwriting the data before the copy is done
                 if (sched->events[split_backend_id][sched->cur_copy] != NULL) {
                     ggml_backend_event_synchronize(sched->events[split_backend_id][sched->cur_copy]);
@@ -1691,6 +1713,7 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                 }
                 ggml_backend_tensor_copy(input, input_cpy);
             } else {
+                nvtx3::scoped_range sc_5{nvtx3::event_attributes{nvtx3::rgb{255, 0, 0}, "activations"}}; // red
                 // wait for the split backend to finish using the input before overwriting it
                 if (sched->events[split_backend_id][sched->cur_copy] != NULL) {
                     ggml_backend_event_wait(split_backend, sched->events[split_backend_id][sched->cur_copy]);
@@ -1706,6 +1729,7 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                     (node->src[0] == input_cpy && node->op == GGML_OP_MUL_MAT_ID)
                     //|| (node->src[1] == input_cpy && node->op == GGML_OP_ADD_ID) /* GGML_OP_ADD_ID weights are small and not worth splitting */
                     )) {
+                    nvtx3::scoped_range sc_6{nvtx3::event_attributes{nvtx3::rgb{128, 0, 128}, "MoE-optimization"}}; // purple
 
                     const int64_t n_expert   = node->op == GGML_OP_MUL_MAT_ID ? input->ne[2] : input->ne[1];
                     const size_t expert_size = node->op == GGML_OP_MUL_MAT_ID ? input->nb[2] : input->nb[1];
@@ -1784,9 +1808,11 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
                     }
                     copy_experts(first_id, last_id);
                 } else {
+                    nvtx3::scoped_range sc_7{nvtx3::event_attributes{nvtx3::rgb{255, 165, 0}, "non-moe copy"}}; // orange
                     // try async copy, but if not possible, we can still use a sync copy without synchronizing the dst backend, since we handle the synchronization here with multiple copies and events
                     // TODO: add public function to facilitate this, since applications do not have direct access to the backend interface
                     if (!split_backend->iface.cpy_tensor_async || !split_backend->iface.cpy_tensor_async(input_backend, split_backend, input, input_cpy)) {
+                        nvtx3::scoped_range sc_8{nvtx3::event_attributes{nvtx3::rgb{255, 127, 80}, "no async copy possible, of both backends + synchronous copy"}}; // coral
                         ggml_backend_synchronize(input_backend);
                         if (sched->events[split_backend_id][sched->cur_copy] != NULL) {
                             ggml_backend_event_synchronize(sched->events[split_backend_id][sched->cur_copy]);
@@ -1800,11 +1826,14 @@ static enum ggml_status ggml_backend_sched_compute_splits(ggml_backend_sched_t s
         }
 
         if (!sched->callback_eval) {
+            // note, do not use anymore in favor of CPU/CUDA specific scoped ranges
+            // nvtx3::scoped_range sc_9{nvtx3::event_attributes{nvtx3::rgb{0, 0, 128}, "streamlined execution"}}; // navy
             enum ggml_status ec = ggml_backend_graph_compute_async(split_backend, &split->graph);
             if (ec != GGML_STATUS_SUCCESS) {
                 return ec;
             }
         } else {
+            nvtx3::scoped_range sc_10{nvtx3::event_attributes{nvtx3::rgb{75, 0, 130}, "complex, for-looped execution"}}; // indigo
             // similar to ggml_backend_compare_graph_backend
             for (int j0 = 0; j0 < split->graph.n_nodes; j0++) {
                 struct ggml_tensor * t = split->graph.nodes[j0];
@@ -1994,6 +2023,8 @@ bool ggml_backend_sched_reserve(ggml_backend_sched_t sched, struct ggml_cgraph *
 }
 
 bool ggml_backend_sched_alloc_graph(ggml_backend_sched_t sched, struct ggml_cgraph * graph) {
+    nvtx3::scoped_range sc_26{nvtx3::event_attributes{nvtx3::rgb{184, 134, 11}, "sched_alloc_graph"}}; // darkgoldenrod
+
     GGML_ASSERT(sched);
     GGML_ASSERT((int)sched->hash_set.size >= graph->n_nodes + graph->n_leafs);
     GGML_ASSERT(!sched->is_alloc);
@@ -2013,12 +2044,15 @@ bool ggml_backend_sched_alloc_graph(ggml_backend_sched_t sched, struct ggml_cgra
 }
 
 enum ggml_status ggml_backend_sched_graph_compute(ggml_backend_sched_t sched, struct ggml_cgraph * graph) {
+    nvtx3::scoped_range sc_11{nvtx3::event_attributes{nvtx3::rgb{255, 0, 255}, "sched_graph_compute"}}; // magenta
     enum ggml_status err = ggml_backend_sched_graph_compute_async(sched, graph);
     ggml_backend_sched_synchronize(sched);
     return err;
 }
 
 enum ggml_status ggml_backend_sched_graph_compute_async(ggml_backend_sched_t sched, struct ggml_cgraph * graph) {
+    nvtx3::scoped_range sc_25{nvtx3::event_attributes{nvtx3::rgb{199, 21, 133}, "sched_graph_compute_async"}}; // mediumvioletred
+
     GGML_ASSERT(sched);
     if (!sched->is_reset && !sched->is_alloc) {
         ggml_backend_sched_reset(sched);

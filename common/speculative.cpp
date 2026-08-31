@@ -20,6 +20,13 @@
 #include <map>
 #include <cinttypes>
 
+#ifdef _WIN32
+#    ifndef NOMINMAX
+#        define NOMINMAX
+#    endif
+#endif
+#include <nvtx3/nvtx3.hpp>
+
 #define SPC_DBG(fmt, ...) LOG_DBG("spec %12.*s: " fmt, 12, __func__, __VA_ARGS__)
 #define SPC_TRC(fmt, ...) LOG_TRC("spec %12.*s: " fmt, 12, __func__, __VA_ARGS__)
 #define SPC_INF(fmt, ...) LOG_INF("spec %12.*s: " fmt, 12, __func__, __VA_ARGS__)
@@ -1132,12 +1139,16 @@ struct common_speculative_impl_draft_dflash : public common_speculative_impl {
             const int32_t n_rows = i_batch_end[seq_id] - i_batch_beg[seq_id] + 1;
 
             for (int32_t offset = 0; offset < n_rows; offset += n_ubatch) {
+                nvtx3::scoped_range sc_3{nvtx3::event_attributes{nvtx3::rgb{160, 82, 45}, "dflash_inject_chunk"}}; // sienna
+
                 const int32_t n_chunk = std::min(n_ubatch, n_rows - offset);
 
                 // gather target features per extract layer; the fused decode encodes and
                 // injects them into the K/V cache at the target positions
                 batch_inject.n_tokens = n_chunk;
                 for (uint32_t k = 0; k < target_layer_ids_n; ++k) {
+                    nvtx3::scoped_range sc_4{nvtx3::event_attributes{nvtx3::rgb{255, 140, 0}, "gather_tgt_feats"}}; // darkorange
+
                     const float * layer = llama_get_embeddings_layer_inp(ctx_tgt, (uint32_t) target_layer_ids[k]);
                     if (!layer) {
                         GGML_ABORT("DFlash: target layer %d input not extracted.", target_layer_ids[k]);
@@ -2781,6 +2792,7 @@ bool common_speculative_process(common_speculative * spec, const llama_batch & b
     }
 
     for (auto & impl : spec->impls) {
+        nvtx3::scoped_range sc_1{nvtx3::event_attributes{nvtx3::rgb{255, 215, 0}, ("spec_process=" + common_speculative_type_to_str(impl->type)).c_str()}}; // gold
         result = result && impl->process(batch);
     }
 
@@ -2812,6 +2824,7 @@ void common_speculative_draft(common_speculative * spec) {
 
     for (auto & impl : spec->impls) {
         {
+            nvtx3::scoped_range sc_2{nvtx3::event_attributes{nvtx3::rgb{50, 205, 50}, ("spec_draft=" + common_speculative_type_to_str(impl->type)).c_str()}}; // lime
             common_time_meas tm(impl->t_draft_us, !impl->gen_perf);
             impl->draft(dparams);
             impl->n_call_draft++;
@@ -2879,6 +2892,8 @@ void common_speculative_accept(common_speculative * spec, llama_seq_id seq_id, u
         GGML_ASSERT(n_accepted == 0);
         return;
     }
+
+    nvtx3::scoped_range sc_5{nvtx3::event_attributes{nvtx3::rgb{75, 0, 130}, "spec_accept"}}; // indigo
 
     {
         common_time_meas tm(impl->t_accept_us, !impl->gen_perf);

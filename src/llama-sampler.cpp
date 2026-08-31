@@ -20,6 +20,13 @@
 #include <unordered_map>
 #include <stdexcept>
 
+#ifdef _WIN32
+#    ifndef NOMINMAX
+#        define NOMINMAX
+#    endif
+#endif
+#include <nvtx3/nvtx3.hpp>
+
 // the ring buffer works similarly to std::deque, but with a fixed capacity
 template<typename T>
 struct ring_buffer {
@@ -383,6 +390,8 @@ void llama_sampler_apply(struct llama_sampler * smpl, struct llama_token_data_ar
     if (!smpl) {
         return;
     }
+
+    nvtx3::scoped_range sc_1{nvtx3::event_attributes{nvtx3::rgb{255, 20, 147}, (std::string("llama_sampler_apply=") + llama_sampler_name(smpl)).c_str()}}; // deeppink
 
     GGML_ASSERT(smpl->iface->apply);
     smpl->iface->apply(smpl, cur_p);

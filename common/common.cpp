@@ -59,6 +59,8 @@
 #include <sys/systemcfg.h>
 #endif
 
+#include <nvtx3/nvtx3.hpp>
+
 #if defined(_MSC_VER)
 #pragma warning(disable: 4244 4267) // possible loss of data
 #endif
@@ -1645,6 +1647,8 @@ void common_memory::init(llama_context * ctx_tgt, llama_context * ctx_dft) {
 }
 
 void common_memory::seq_rm(llama_seq_id seq_id, llama_pos p0, llama_pos p1) const {
+    nvtx3::scoped_range sc_5{nvtx3::event_attributes{nvtx3::rgb{0, 128, 128}, "mem_seq_rm"}}; // teal
+
     common_context_seq_rm(ctx_tgt, seq_id, p0, p1);
     if (ctx_dft) {
         common_context_seq_rm(ctx_dft, seq_id, p0, p1);
@@ -2288,6 +2292,8 @@ void common_prompt_checkpoint::update_tgt(
         return;
     }
 
+    nvtx3::scoped_range sc_3{nvtx3::event_attributes{nvtx3::rgb{178, 34, 34}, "ckpt_update_tgt"}}; // firebrick
+
     const size_t ckpt_size = llama_state_seq_get_size_ext(ctx, seq_id, flags);
 
     data_tgt.resize(ckpt_size);
@@ -2305,6 +2311,8 @@ void common_prompt_checkpoint::update_dft(
     if (ctx == nullptr) {
         return;
     }
+
+    nvtx3::scoped_range sc_4{nvtx3::event_attributes{nvtx3::rgb{205, 133, 63}, "ckpt_update_dft"}}; // peru
 
     const size_t ckpt_size = llama_state_seq_get_size_ext(ctx, seq_id, flags);
 
@@ -2328,6 +2336,8 @@ void common_prompt_checkpoint::load_tgt(
         return;
     }
 
+    nvtx3::scoped_range sc_1{nvtx3::event_attributes{nvtx3::rgb{128, 0, 0}, "ckpt_load_tgt"}}; // maroon
+
     const size_t n = llama_state_seq_set_data_ext(ctx, data_tgt.data(), data_tgt.size(), seq_id, flags);
     if (n != data_tgt.size()) {
         GGML_ABORT("checkpoint size mismatch: expected %zu, got %zu\n", data_tgt.size(), n);
@@ -2345,6 +2355,8 @@ void common_prompt_checkpoint::load_dft(
     if (data_dft.empty()) {
         return;
     }
+
+    nvtx3::scoped_range sc_2{nvtx3::event_attributes{nvtx3::rgb{139, 69, 19}, "ckpt_load_dft"}}; // brown
 
     const size_t n = llama_state_seq_set_data_ext(ctx, data_dft.data(), data_dft.size(), seq_id, flags);
     if (n != data_dft.size()) {

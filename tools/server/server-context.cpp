@@ -36,6 +36,8 @@
 #include <windows.h>
 #endif
 
+#include <nvtx3/nvtx3.hpp>
+
 constexpr int HTTP_POLLING_SECONDS = 1;
 
 static common_speculative_output_limits server_output_limits(const common_params & params) {
@@ -62,6 +64,8 @@ static std::vector<llama_token> server_sample_and_accept_synth(
         const std::vector<double> & synth_probs,
         std::mt19937 & rng,
         bool is_replay) {
+    nvtx3::scoped_range sc_10{nvtx3::event_attributes{nvtx3::rgb{60, 179, 113}, "smpl_sample_accept_synth"}}; // mediumseagreen
+
     GGML_ASSERT(idxs.size() == draft.size() + 1);
     GGML_ASSERT(synth_probs.size() >= draft.size());
 
@@ -503,6 +507,8 @@ struct server_slot {
 
     // add sampled token of this slot to the batch, optionally add the speculative draft tokens if any
     void handle_last_sampled_token(server_batch & batch) {
+        nvtx3::scoped_range sc_12{nvtx3::event_attributes{nvtx3::rgb{147, 112, 219}, "handle_last_sampled_token"}}; // mediumpurple
+
         bool add_ok = true;
         if (spec_draft.empty()) {
             // no speculative decoding
@@ -2764,6 +2770,7 @@ private:
 #endif
 
     void update_slots() {
+        nvtx3::scoped_range sc_2{nvtx3::event_attributes{nvtx3::rgb{64, 64, 64}, "update_slots"}}; // dark gray
 #ifdef DEBUG_TIMINGS
         static int64_t t_prev = 0;
         int64_t t_start = ggml_time_us();
@@ -2847,7 +2854,7 @@ private:
                 // TODO @ngxson : maybe handle n_batch == 1 here instead of inside decode()
 
                 batch_view = batch.get_view(off, n_tokens);
-                bool ok = decode(n_batch, off, batch_view);
+                bool ok = decode(n_batch, off, batch_view); //aendk apparently calling spec_process
 #ifdef DEBUG_TIMINGS
                 llama_synchronize(ctx_tgt);
 #endif
@@ -2880,6 +2887,8 @@ private:
     }
 
     void pre_decode() {
+        nvtx3::scoped_range sc_3{nvtx3::event_attributes{nvtx3::rgb{173, 216, 230}, "pre_decode"}}; // light blue
+
         // apply context-shift if needed
         // TODO: simplify and improve
         iterate(slots, [&](server_slot & slot) {
@@ -3022,6 +3031,8 @@ private:
 
         // make checkpoints if needed
         iterate(drafting, [&](server_slot & slot) {
+            nvtx3::scoped_range sc_11{nvtx3::event_attributes{nvtx3::rgb{218, 165, 32}, "spec_ckpt_update"}}; // goldenrod
+
             auto & draft = slot.spec_draft;
             auto & ckpt  = slot.spec_ckpt;
 
@@ -3652,6 +3663,7 @@ private:
         // note: the sync is done here too, so that the wait is also covered by the yield
         int ret = 0;
         queue_tasks.yield_to_queue([&]() {
+            nvtx3::scoped_range sc_1{nvtx3::event_attributes{nvtx3::rgb{0, 0, 128}, "tgt_decode"}}; // navy
             ret = llama_decode(ctx_tgt, batch_view);
             if (ret == 0 && has_output) {
                 llama_synchronize(ctx_tgt);
@@ -3755,6 +3767,8 @@ private:
     }
 
     void post_decode(int32_t n_batch_tokens, int32_t off, llama_batch & batch_view) {
+        nvtx3::scoped_range sc_4{nvtx3::event_attributes{nvtx3::rgb{221, 160, 221}, "post_decode"}}; // plum
+
         // for checking if a given batch index is inside batch_view
         auto is_inside_view = [&](int32_t idx) {
             return idx >= off && idx < off + n_batch_tokens;
@@ -3825,6 +3839,7 @@ private:
 
             llama_token id;
             {
+                nvtx3::scoped_range sc_5{nvtx3::event_attributes{nvtx3::rgb{255, 165, 0}, "sample"}}; // orange
                 scoped_timer timer(t_sampl, n_sampl);
                 id = common_sampler_sample(slot.smpl.get(), slot.ctx_tgt, tok_idx);
             }
@@ -3881,6 +3896,7 @@ private:
 
             // verify and try to accept the draft
             {
+                nvtx3::scoped_range sc_6{nvtx3::event_attributes{nvtx3::rgb{0, 128, 128}, "spec_verify"}}; // teal
                 common_sampler_ptr smpl_save(common_sampler_clone(slot.smpl.get()));
 
                 GGML_ASSERT(slot.spec_i_batch.size() == n_draft + 1);
@@ -3903,6 +3919,7 @@ private:
                 // check for partial draft acceptance
                 if (n_rollback > 0) {
                     if (use_ckpt_tgt) {
+                        nvtx3::scoped_range sc_7{nvtx3::event_attributes{nvtx3::rgb{255, 0, 0}, "spec_ckpt_restore"}}; // red
                         if (trace > 0) {
                             SLT_INF(slot, "accepted %2zu/%2zu draft tokens (restore checkpoint)\n", accepted.size() - 1, slot.spec_draft.size());
                         }
@@ -3942,6 +3959,10 @@ private:
             const auto ids = std::move(slot.spec_draft);
 
             size_t n_accepted = ids.size() - 1;
+
+            {
+            nvtx3::scoped_range sc_9{nvtx3::event_attributes{nvtx3::rgb{75, 0, 130}, "spec_commit"}}; // indigo
+
             if (slot.spec_is_replay && n_accepted > 0) {
                 n_accepted--;
             }
@@ -3962,15 +3983,20 @@ private:
             }
 
             // add accepted tokens to the prompt
-            slot.prompt.tokens.keep_first(slot.prompt.n_tokens() - n_draft);
-            slot.prompt.tokens.insert({ids.begin(), ids.end() - 1});
+            {
+                nvtx3::scoped_range sc_13{nvtx3::event_attributes{nvtx3::rgb{32, 178, 170}, "prompt_splice"}}; // lightseagreen
+
+                slot.prompt.tokens.keep_first(slot.prompt.n_tokens() - n_draft);
+                slot.prompt.tokens.insert({ids.begin(), ids.end() - 1});
+            }
 
             slot.sampled = ids.back(); // last accepted token
             SLT_DBG(slot, "add accepted tokens: sampled=%d, ids.size=%zu, n_draft=%zu\n", slot.sampled, ids.size(), n_draft);
 
             slot.mem.seq_rm(slot.id, slot.prompt.tokens.pos_next(), -1);
-
+            }
             for (size_t i = 0; i < ids.size(); ++i) {
+                nvtx3::scoped_range sc_8{nvtx3::event_attributes{nvtx3::rgb{240, 230, 140}, "emit_token"}}; // khaki
                 completion_token_output result;
 
                 result.tok          = ids[i];

@@ -15,6 +15,13 @@
 #include <unordered_map>
 #include <vector>
 
+#ifdef _WIN32
+#    ifndef NOMINMAX
+#        define NOMINMAX
+#    endif
+#endif
+#include <nvtx3/nvtx3.hpp>
+
 // the ring buffer works similarly to std::deque, but with a fixed capacity
 // TODO: deduplicate with llama-impl.h
 template<typename T>
@@ -128,6 +135,8 @@ struct common_sampler {
     }
 
     void set_logits(struct llama_context * ctx, int idx) {
+        nvtx3::scoped_range sc_5{nvtx3::event_attributes{nvtx3::rgb{255, 0, 255}, "set_logits"}}; // magenta
+
         const float *       sampled_probs  = llama_get_sampled_probs_ith     (ctx, idx);
         const float *       sampled_logits = llama_get_sampled_logits_ith    (ctx, idx);
         const llama_token * sampled_ids    = llama_get_sampled_candidates_ith(ctx, idx);
@@ -138,18 +147,24 @@ struct common_sampler {
         const int n_vocab = llama_vocab_n_tokens(vocab);
 
         if (sampled_probs) {
+            nvtx3::scoped_range sc_6{nvtx3::event_attributes{nvtx3::rgb{0, 128, 128}, "fill_from_probs"}}; // teal
+
             const uint32_t sampled_probs_count = llama_get_sampled_probs_count_ith(ctx, idx);
             cur.resize(sampled_probs_count);
             for (uint32_t i = 0; i < sampled_probs_count; ++i) {
                 cur[i] = llama_token_data{sampled_ids[i], sampled_logits[i], sampled_probs[i]};
             }
         } else if (sampled_logits) {
+            nvtx3::scoped_range sc_7{nvtx3::event_attributes{nvtx3::rgb{128, 128, 0}, "fill_from_logits"}}; // olive
+
             const uint32_t sampled_logits_count = llama_get_sampled_logits_count_ith(ctx, idx);
             cur.resize(sampled_logits_count);
             for (uint32_t i = 0; i < sampled_logits_count; i++) {
                 cur[i] = llama_token_data{sampled_ids[i], sampled_logits[i], 0.0f};
             }
         } else {
+            nvtx3::scoped_range sc_8{nvtx3::event_attributes{nvtx3::rgb{255, 69, 0}, "fill_full_vocab"}}; // orangered
+
             const auto * logits = llama_get_logits_ith(ctx, idx);
             GGML_ASSERT(logits != nullptr);
             cur.resize(n_vocab);
@@ -507,6 +522,8 @@ void common_sampler_reset(struct common_sampler * gsmpl) {
 }
 
 struct common_sampler * common_sampler_clone(common_sampler * gsmpl) {
+    nvtx3::scoped_range sc_1{nvtx3::event_attributes{nvtx3::rgb{255, 0, 0}, "smpl_clone"}}; // red
+
     return new common_sampler {
         /* .params  = */ gsmpl->params,
         /* .grmr    = */ llama_sampler_clone(gsmpl->grmr),
@@ -522,6 +539,8 @@ void common_sampler_copy(const common_sampler * src, common_sampler * dst) {
     if (!src || !dst || src == dst) {
         return;
     }
+
+    nvtx3::scoped_range sc_2{nvtx3::event_attributes{nvtx3::rgb{255, 165, 0}, "smpl_copy"}}; // orange
 
     GGML_ASSERT((src->grmr == nullptr) == (dst->grmr == nullptr));
     GGML_ASSERT((src->rbudget == nullptr) == (dst->rbudget == nullptr));
@@ -592,6 +611,8 @@ struct llama_sampler * common_sampler_get(const struct common_sampler * gsmpl) {
 }
 
 llama_token common_sampler_sample(struct common_sampler * gsmpl, struct llama_context * ctx, int idx, bool grammar_first) {
+    nvtx3::scoped_range sc_3{nvtx3::event_attributes{nvtx3::rgb{0, 255, 0}, "common_sampler_sample"}}; // green
+
     llama_synchronize(ctx);
 
     // start measuring sampling time after the llama_context synchronization in order to not measure any ongoing async operations
@@ -609,9 +630,13 @@ llama_token common_sampler_sample(struct common_sampler * gsmpl, struct llama_co
     // Check if a backend sampler has already sampled a token in which case we
     // return that token id directly.
     {
+        nvtx3::scoped_range sc_9{nvtx3::event_attributes{nvtx3::rgb{75, 0, 130}, "get_sampled_token"}}; // indigo
+
         id = llama_get_sampled_token_ith(ctx, idx);
 
         if (id != LLAMA_TOKEN_NULL) {
+            nvtx3::scoped_range sc_10{nvtx3::event_attributes{nvtx3::rgb{240, 230, 140}, "backend_token_lookup"}}; // khaki
+
             LOG_DBG("%s: Backend sampler selected token: '%d'. Will not run any CPU samplers\n", __func__, id);
 
             GGML_ASSERT(!gsmpl->grmr    && "using grammar in combination with backend sampling is not supported");
@@ -676,6 +701,8 @@ llama_token common_sampler_sample(struct common_sampler * gsmpl, struct llama_co
 }
 
 std::vector<llama_token> common_sampler_sample_and_accept_n(struct common_sampler * gsmpl, struct llama_context * ctx, const std::vector<int> & idxs, const llama_tokens & draft, bool grammar_first) {
+    nvtx3::scoped_range sc_4{nvtx3::event_attributes{nvtx3::rgb{0, 0, 255}, "smpl_sample_accept_n"}}; // blue
+
     GGML_ASSERT(idxs.size() == draft.size() + 1 && "idxs.size() must be draft.size() + 1");
 
     std::vector<llama_token> result;

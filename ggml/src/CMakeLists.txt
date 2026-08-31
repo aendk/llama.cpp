@@ -370,6 +370,9 @@ if (GGML_BACKEND_DIR)
     target_compile_definitions(ggml PUBLIC GGML_BACKEND_DIR="${GGML_BACKEND_DIR}")
 endif()
 
+find_package(CUDAToolkit)
+target_link_libraries(ggml-base PUBLIC CUDA::nvtx3)
+
 target_link_libraries(ggml PUBLIC ggml-base)
 
 if (CMAKE_SYSTEM_NAME MATCHES "Linux")
