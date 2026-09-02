@@ -608,7 +608,13 @@ void llama_context::sched_reserve() {
     LLAMA_LOG_DEBUG("%s: max_nodes = %zu\n", __func__, max_nodes);
 
     gf_res_prev.reset(new llm_graph_result(max_nodes));
+    if (cparams.ctx_type == LLAMA_CONTEXT_TYPE_MTP) {
+        gf_res_prev_mtp_catchup.reset(new llm_graph_result(max_nodes));
+    } else {
+        gf_res_prev_mtp_catchup.reset();
+    }
     gf_res_reserve.reset(new llm_graph_result(max_nodes));
+    gf_res_prev_active = nullptr;
 
     sched.reset(ggml_backend_sched_new(backend_ptrs.data(), backend_buft.data(), backend_ptrs.size(), max_nodes, cparams.pipeline_parallel, cparams.op_offload));
 
@@ -826,10 +832,13 @@ bool llama_context::memory_update(bool optimize) {
                 }
         }
 
-        // reset the previous graph result to make sure that it won't be reused
-        // TODO: change the mctx->apply() to return information if a graph reserve is needed
-        //       reset the graph result only if the memory module did reset the scheduler
+        // reset the previous graph results to make sure that they won't be reused
+        // TODO: make mctx->apply() report if a graph reserve is needed, then reset graph results only if the memory module reset the scheduler
         gf_res_prev->reset();
+        if (gf_res_prev_mtp_catchup) {
+            gf_res_prev_mtp_catchup->reset();
+        }
+        gf_res_prev_active = nullptr;
 
         if (!mctx->apply()) {
             LLAMA_LOG_ERROR("%s: failed to apply memory update\n", __func__);
@@ -1353,13 +1362,17 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
     }
 
     auto * res = gf_res_prev.get();
+    // MTP catch-up batches do not request outputs.
+    if (cparams.ctx_type == LLAMA_CONTEXT_TYPE_MTP && n_outputs == 0) {
+        res = gf_res_prev_mtp_catchup.get();
+    }
     auto * gf  = res->get_gf();
 
     // the new graph parameters
     // in order to correctly reuse a graph, it's full topology has to be uniquely determined by these parameters
     const auto gparams = graph_params(res, ubatch, mctx, gtype);
 
-    if (!graph_reuse_disable && res->can_reuse(gparams)) {
+    if (!graph_reuse_disable && gf_res_prev_active == res && res->can_reuse(gparams)) {
         nvtx3::scoped_range sc_8{nvtx3::event_attributes{nvtx3::rgb{50, 205, 50}, "graph_reuse"}}; // lime
         //LLAMA_LOG_DEBUG("%s: reusing previous graph\n", __func__);
 
@@ -1373,6 +1386,8 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
         n_reused++;
     } else {
         nvtx3::scoped_range sc_9{nvtx3::event_attributes{nvtx3::rgb{139, 69, 19}, "graph_build"}}; // brown
+
+        gf_res_prev_active = nullptr;
 
         res->reset();
 
@@ -1396,6 +1411,8 @@ llm_graph_result * llama_context::process_ubatch(const llama_ubatch & ubatch, ll
             ret = GGML_STATUS_ALLOC_FAILED;
             return nullptr;
         }
+
+        gf_res_prev_active = res;
     }
 
     // set the input data for the input tensors
@@ -2468,8 +2485,12 @@ ggml_cgraph * llama_context::graph_reserve(
 
     ggml_backend_sched_reset(sched.get());
 
-    // when the scheduler is reset, we cannot reuse the old graph, so we reset the previous graph result to prevent that
+    // when the scheduler is reset, we cannot reuse old graphs, so we reset the previous graph results
     gf_res_prev->reset();
+    if (gf_res_prev_mtp_catchup) {
+        gf_res_prev_mtp_catchup->reset();
+    }
+    gf_res_prev_active = nullptr;
 
     // store the n_outputs as it is, and restore it afterwards
     // TODO: not sure if needed, might simplify in the future by removing this
@@ -3545,6 +3566,7 @@ void llama_context::opt_epoch_iter(
 
             const auto gparams = graph_params(res, ubatch, mctx.get(), ctx_type_to_graph_type(cparams.ctx_type));
 
+            gf_res_prev_active = nullptr;
             res->reset();
 
             auto * gf = model.build_graph(gparams);
